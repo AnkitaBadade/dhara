@@ -1,0 +1,6 @@
+{
+  "name": "Dhara (धारा) — Health Resource Flow Platform",
+  "description": "Federated AI platform for India's Primary Health Centre network: real-time stock, beds and staff visibility, voice & register digitisation, surge warnings, and inter-district redistribution.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
