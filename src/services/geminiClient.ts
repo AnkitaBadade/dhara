@@ -16,7 +16,7 @@ export type GeminiRequest = {
   config?: Record<string, unknown>;
 };
 
-const TIMEOUT_MS = 20000;
+const TIMEOUT_MS = 55000;
 
 export async function callGemini(req: GeminiRequest): Promise<string> {
   const controller = new AbortController();
