@@ -108,6 +108,7 @@ export interface ParsedReport {
     initial_unmatched?: boolean;
   }>;
   isFallback?: boolean;
+  transcript?: string;
 }
 
 export interface TransferOrder {

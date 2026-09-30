@@ -19,7 +19,7 @@ import {
   calculateFederatedAverage,
   calculateSeasonalUplift,
 } from '../lib/resourceMath';
-import { callGemini } from '../services/geminiClient';
+import { callGemini, GEMINI_MODEL } from '../services/geminiClient';
 import { getStateHubAdoptionPrompt } from '../services/prompts';
 import { MedicinePictogram } from '../lib/i18n';
 import { MedicineConsumptionTrendChart } from './MedicineConsumptionTrendChart';
@@ -105,7 +105,7 @@ export const Screen3_StateHub: React.FC = () => {
 
     try {
       const prompt = getStateHubAdoptionPrompt('Odisha', changedSummary);
-      const res = await callGemini({ model: 'gemini-3.8-flash', contents: prompt });
+      const res = await callGemini({ model: GEMINI_MODEL, contents: prompt });
       adoptFederatedProfileForOdisha(res);
     } catch (e) {
       adoptFederatedProfileForOdisha(fallbackNote);

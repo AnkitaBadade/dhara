@@ -39,7 +39,7 @@ import {
   findRedistributionCandidates,
   haversineDistance,
 } from '../lib/resourceMath';
-import { callGemini, callGeminiJSON } from '../services/geminiClient';
+import { callGemini, callGeminiJSON, GEMINI_MODEL } from '../services/geminiClient';
 import {
   getEmergencyBulletinPrompt,
   getExplainShortagePrompt,
@@ -691,7 +691,7 @@ export const Screen2_DistrictOfficer: React.FC = () => {
         dailyBurn,
         reasonText
       );
-      const res = await callGemini({ model: 'gemini-3.8-flash', contents: prompt });
+      const res = await callGemini({ model: GEMINI_MODEL, contents: prompt });
       setExplainItem((prev) => (prev ? { ...prev, aiExplanation: res, loading: false } : null));
     } catch (e) {
       setExplainItem((prev) => (prev ? { ...prev, aiExplanation: fallbackExplanation, loading: false } : null));
@@ -716,7 +716,7 @@ export const Screen2_DistrictOfficer: React.FC = () => {
     try {
       const prompt = getEmergencyBulletinPrompt(textToAnalyze);
       const res = await callGeminiJSON<EmergencySurgeExtraction>({
-        model: 'gemini-3.8-flash',
+        model: GEMINI_MODEL,
         contents: prompt,
       });
 

@@ -11,7 +11,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { BilingualText, formatDaysAgo, t, ListenButton, MedicinePictogram } from '../lib/i18n';
 import { haversineDistance } from '../lib/resourceMath';
-import { callGeminiJSON } from '../services/geminiClient';
+import { callGeminiJSON, GEMINI_MODEL } from '../services/geminiClient';
 import { getCitizenQueryPrompt } from '../services/prompts';
 import { PHC } from '../types';
 
@@ -114,7 +114,7 @@ export const Screen4_Citizen: React.FC = () => {
         );
 
         const res = await callGeminiJSON<CitizenAnswerData>({
-          model: 'gemini-3.8-flash',
+          model: GEMINI_MODEL,
           contents: prompt,
         });
 
@@ -288,7 +288,7 @@ export const Screen4_Citizen: React.FC = () => {
       );
 
       const res = await callGeminiJSON<CitizenAnswerData>({
-        model: 'gemini-3.8-flash',
+        model: GEMINI_MODEL,
         contents: prompt,
       });
 
@@ -352,7 +352,7 @@ export const Screen4_Citizen: React.FC = () => {
               <BilingualText primary="अपने केंद्र के बारे में पूछें" enSub="Ask about your facility:" lang={language} />
             </label>
             <ListenButton
-              text={
+              textToRead={
                 language === 'hi'
                   ? 'अपने अस्पताल या प्राथमिक स्वास्थ्य केंद्र में दवा और डॉक्टर की स्थिति पूछें।'
                   : language === 'or'
@@ -454,7 +454,7 @@ export const Screen4_Citizen: React.FC = () => {
               </h2>
             </div>
             <div className="flex items-center gap-2">
-              <ListenButton text={result.answer} lang={language} />
+              <ListenButton textToRead={result.answer} lang={language} />
               {result.isFallback && (
                 <span className="text-xs bg-[#FFFAEB] text-[#B54708] border border-[#D0D5DD] px-2.5 py-1 rounded-[6px] font-medium">
                   Sample result

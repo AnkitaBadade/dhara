@@ -1,49 +1,42 @@
 // The ONE place the app talks to Gemini.
-// - Inside Google AI Studio's preview, a key is injected, so we call Gemini directly.
-// - On Vercel, no key exists in the browser, so we call our own /api/gemini function,
-//   which holds the key on the server.
-// Every feature (parse stock, forecast, transfers, citizen answers) must use callGemini().
+// The browser never holds an API key. Every call goes to our own server route
+// POST /api/gemini, which adds the key on the server:
+//   - in Google AI Studio: server.ts (Express)
+//   - on Vercel: api/gemini.js (serverless function)
 
-import { GoogleGenAI } from '@google/genai';
+export const GEMINI_MODEL = 'gemini-3.8-flash';
+
+export type GeminiPart =
+  | { text: string }
+  | { inlineData: { mimeType: string; data: string } };
 
 export type GeminiRequest = {
-  model: string;               // e.g. the default Flash model AI Studio chose
-  contents: unknown;           // string | parts[] | [{ role, parts }]
-  config?: Record<string, unknown>; // responseMimeType, responseSchema, systemInstruction, temperature...
+  model?: string;
+  contents: string | GeminiPart[] | Array<{ role: string; parts: GeminiPart[] }>;
+  config?: Record<string, unknown>;
 };
 
-function browserKey(): string | undefined {
-  try {
-    // AI Studio / Vite inject one of these at build time. On Vercel they will be undefined.
-    // @ts-ignore
-    return process.env.API_KEY || process.env.GEMINI_API_KEY || undefined;
-  } catch {
-    return undefined;
-  }
-}
+const TIMEOUT_MS = 20000;
 
 export async function callGemini(req: GeminiRequest): Promise<string> {
-  const key = browserKey();
-  if (key) {
-    const ai = new GoogleGenAI({ apiKey: key });
-    const r = await ai.models.generateContent({
-      model: req.model,
-      contents: req.contents as any,
-      config: req.config as any,
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const r = await fetch('/api/gemini', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...req, model: req.model || GEMINI_MODEL }),
+      signal: controller.signal,
     });
-    return r.text ?? '';
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || `AI request failed (${r.status})`);
+    return (data.text as string) || '';
+  } finally {
+    clearTimeout(timer);
   }
-  const r = await fetch('/api/gemini', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(req),
-  });
-  const data = await r.json();
-  if (!r.ok) throw new Error(data.error || 'AI request failed');
-  return data.text as string;
 }
 
-// Helper for JSON responses: strips ```json fences if the model adds them.
+// JSON responses: strips ```json fences if the model adds them.
 export async function callGeminiJSON<T>(req: GeminiRequest): Promise<T> {
   const text = await callGemini({
     ...req,
@@ -51,4 +44,22 @@ export async function callGeminiJSON<T>(req: GeminiRequest): Promise<T> {
   });
   const clean = text.replace(/^```(?:json)?\s*|\s*```$/g, '').trim();
   return JSON.parse(clean) as T;
+}
+
+// "data:image/jpeg;base64,AAAA" -> { mimeType, data }
+export function dataUrlToInlineData(dataUrl: string): { mimeType: string; data: string } | null {
+  const m = /^data:([^;]+);base64,(.*)$/.exec(dataUrl || '');
+  return m ? { mimeType: m[1], data: m[2] } : null;
+}
+
+export function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const s = String(reader.result || '');
+      resolve(s.slice(s.indexOf(',') + 1));
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
 }

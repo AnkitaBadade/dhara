@@ -41,6 +41,11 @@ Quantity & Unit rules:
   * For NS1KIT: unit is "kit" (e.g. "12 kits" = 12).
 - Event: "count" (remaining stock / bacha hai), "received" (mila / aaya), "issued" (diya / kharch hua)
 
+Attached media rules:
+- If a PHOTO of a stock register is attached, read it directly. For each medicine row with the latest date, report the BALANCE column as a "count" event. Where a number is crossed out or overwritten, use the corrected number and give confidence below 0.70. Put the row as you read it in "source_text" (e.g. "30-09-2026 Paracetamol 500 · balance 194").
+- If AUDIO is attached, listen to it (Hindi, Odia, Hinglish or English). Add a top-level field "transcript" with what was said, in the original language, and use the spoken words as "source_text".
+- Never invent entries that are not in the text, photo or audio. If nothing can be read, return empty arrays.
+
 Confidence rules:
 - If quantity or item is ambiguous, assign confidence < 0.70 (e.g. 0.55).
 - If clear and explicit, assign confidence >= 0.85.
@@ -98,14 +103,14 @@ Extract the threat parameters into strict JSON:
   "severity": 4, // Integer 1 (mild) to 5 (critical emergency)
   "horizon_days": 14, // Projected duration in days
   "surge": {
-    "PCM_500": 2.8, // Multiplier for expected consumption surge (e.g. 2.0 to 4.0)
-    "ORS_SACH": 2.5,
-    "RL_500": 3.0
+    "PCM500": 2.8, // Multiplier for expected consumption surge (e.g. 2.0 to 4.0)
+    "ORS": 2.5,
+    "RL500": 3.0
   },
   "extra_beds_needed": 15,
   "staff_needed": ["Staff Nurse", "Medical Officer"]
 }
-Include surge multipliers only for medicines directly impacted by the condition (e.g. Dengue -> Paracetamol, ORS, IV Fluids; Cyclone -> ORS, IV fluids, Antibiotics; Floods -> ORS, Chlorine/Albendazole, IV fluids). Return strictly valid JSON.`;
+Surge keys MUST be exact codes from the Available Essential Drug Codes list above (e.g. PCM500, ORS, RL500, NS1KIT, ZN20, AMX500). Include surge multipliers only for medicines directly impacted by the condition (e.g. Dengue -> Paracetamol, ORS, IV Fluids; Cyclone -> ORS, IV fluids, Antibiotics; Floods -> ORS, Chlorine/Albendazole, IV fluids). Return strictly valid JSON.`;
 }
 
 /**

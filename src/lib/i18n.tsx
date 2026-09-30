@@ -715,7 +715,7 @@ export const MedicinePictogram: React.FC<{
   // 1. Tablet Strip (blister strip with pill dots)
   if (norm.includes('tablet') || norm.includes('strip') || norm.includes('capsule')) {
     return (
-      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden="true" title="Tablet Strip">
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
         {/* Strip boundary */}
         <rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" fill="#F8FAFC" />
         {/* Blister perforations / pockets */}
@@ -732,7 +732,7 @@ export const MedicinePictogram: React.FC<{
   // 2. Sachet (packet with corner tear notch and zigzag crimp lines)
   if (norm.includes('sachet') || norm.includes('powder') || norm.includes('ors') || norm.includes('pack')) {
     return (
-      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden="true" title="Sachet">
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
         {/* Pouch rectangle with top right tear notch */}
         <path
           d="M5 4a1 1 0 011-1h10l3 3v13a2 2 0 01-2 2H6a2 2 0 01-2-2V5a1 1 0 011-1z"
@@ -750,7 +750,7 @@ export const MedicinePictogram: React.FC<{
   // 3. IV Bottle (hanging IV infusion fluid bottle with drip tube)
   if (norm.includes('iv') || norm.includes('fluid') || norm.includes('bottle') || norm.includes('ringer')) {
     return (
-      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden="true" title="IV Bottle">
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
         {/* Hanging hook */}
         <path d="M12 2v2M9.5 2h5" stroke="currentColor" strokeLinecap="round" />
         {/* Bottle body */}
@@ -772,7 +772,7 @@ export const MedicinePictogram: React.FC<{
   // 4. Test Kit (rapid diagnostic cassette with sample well 'S' & result window 'C | T')
   if (norm.includes('kit') || norm.includes('test') || norm.includes('rapid') || norm.includes('dengue')) {
     return (
-      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden="true" title="Test Kit">
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
         {/* Cassette body */}
         <rect x="3" y="6" width="18" height="12" rx="2.5" stroke="currentColor" fill="#F8FAFC" />
         {/* Round sample well 'S' */}

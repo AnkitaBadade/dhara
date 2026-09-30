@@ -21,7 +21,7 @@ import { useApp } from '../context/AppContext';
 import { MEDICINES } from '../data/phcData';
 import { BilingualText, formatDaysAgo, t, ListenButton, MedicinePictogram } from '../lib/i18n';
 import { haversineDistance } from '../lib/resourceMath';
-import { callGeminiJSON } from '../services/geminiClient';
+import { callGeminiJSON, GEMINI_MODEL, dataUrlToInlineData, blobToBase64, GeminiPart } from '../services/geminiClient';
 import { getReportExtractionPrompt } from '../services/prompts';
 import { ParsedReport, StaffMember } from '../types';
 
@@ -270,7 +270,18 @@ export const Screen1_PhcStaff: React.FC = () => {
     }
   };
 
-  const medianReportTime = 14;
+  const [reportDurations, setReportDurations] = useState<number[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('dhara-report-durations') || '[]');
+    } catch {
+      return [];
+    }
+  });
+  const medianReportTime = useMemo(() => {
+    if (reportDurations.length === 0) return null;
+    const sorted = [...reportDurations].sort((a, b) => a - b);
+    return sorted[Math.floor(sorted.length / 2)];
+  }, [reportDurations]);
 
   const getDaysAgo = (dateStr?: string) => {
     if (!dateStr) return 0;
@@ -317,20 +328,50 @@ export const Screen1_PhcStaff: React.FC = () => {
     return items.slice(0, 3);
   }, [phcStock, medicines]);
 
-  // Voice recording simulation
-  const startVoiceRecording = () => {
+  // Real voice recording: MediaRecorder -> audio sent to Gemini (max 30 s)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const [micError, setMicError] = useState<string | null>(null);
+
+  const startVoiceRecording = async () => {
+    setMicError(null);
     startReportTimer();
-    setIsRecording(true);
-    setAudioDuration(0);
-    audioIntervalRef.current = setInterval(() => {
-      setAudioDuration((prev) => {
-        if (prev >= 29) {
-          stopVoiceRecording();
-          return 30;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+      const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        if (blob.size < 1000) {
+          setMicError('आवाज़ रिकॉर्ड नहीं हुई — फिर से बोलें / Nothing was recorded — please try again');
+          return;
         }
-        return prev + 1;
-      });
-    }, 1000);
+        const data = await blobToBase64(blob);
+        const mimeType = (recorder.mimeType || 'audio/webm').split(';')[0];
+        handleProcessReport('', { mimeType, data });
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsRecording(true);
+      setAudioDuration(0);
+      audioIntervalRef.current = setInterval(() => {
+        setAudioDuration((prev) => {
+          if (prev >= 29) {
+            stopVoiceRecording();
+            return 30;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+    } catch {
+      setIsRecording(false);
+      setMicError('माइक की अनुमति नहीं मिली — नीचे लिखकर भेजें / Microphone not allowed — please type below instead');
+    }
   };
 
   const stopVoiceRecording = () => {
@@ -338,12 +379,8 @@ export const Screen1_PhcStaff: React.FC = () => {
     if (audioIntervalRef.current) {
       clearInterval(audioIntervalRef.current);
     }
-    const defaultVoice =
-      language === 'or'
-        ? 'Metformin 3 patte bache, 2 bed khali achhi, Dr Sharma chhutti re achhanti'
-        : 'metformin 3 patte bache, 2 bed khali, Dr Sharma aaj chhutti par';
-    setTextInput(defaultVoice);
-    handleProcessReport(defaultVoice);
+    const rec = mediaRecorderRef.current;
+    if (rec && rec.state !== 'inactive') rec.stop();
   };
 
   // Image handling with client-side 1280px resize & progress bar
@@ -363,9 +400,14 @@ export const Screen1_PhcStaff: React.FC = () => {
   };
 
   // Process Report using Gemini AI
-  const handleProcessReport = async (overrideInput?: string) => {
+  const handleProcessReport = async (
+    overrideInput?: string,
+    media?: { mimeType: string; data: string },
+    imageOverride?: string
+  ) => {
     const inputContent = (overrideInput ?? textInput).trim();
-    if (!inputContent && !selectedImage) return;
+    const imageDataUrl = imageOverride ?? selectedImage;
+    if (!inputContent && !imageDataUrl && !media) return;
 
     startReportTimer();
     setIsProcessing(true);
@@ -374,14 +416,22 @@ export const Screen1_PhcStaff: React.FC = () => {
     setPhotoError(null);
 
     try {
+      const imagePart = imageDataUrl ? dataUrlToInlineData(imageDataUrl) : null;
       const prompt = getReportExtractionPrompt(
-        inputContent || 'Attached photo of physical morning register log book with stock tallies.'
+        inputContent ||
+          (imagePart
+            ? 'Read the attached photo of the stock register page.'
+            : 'Listen to the attached voice note.')
       );
+      const parts: GeminiPart[] = [{ text: prompt }];
+      if (imagePart) parts.push({ inlineData: imagePart });
+      if (media) parts.push({ inlineData: media });
 
       const res = await callGeminiJSON<ParsedReport>({
-        model: 'gemini-3.8-flash',
-        contents: prompt,
+        model: GEMINI_MODEL,
+        contents: [{ role: 'user', parts }],
       });
+      if (res.transcript) setTextInput(res.transcript);
 
       const normalizedStock = (res.stock || []).map((item) => {
         const normQty = normalizeStockQuantity(
@@ -393,15 +443,16 @@ export const Screen1_PhcStaff: React.FC = () => {
         return {
           ...item,
           quantity: normQty,
-          confidence: item.confidence ?? 0.88,
+          confidence: typeof item.confidence === 'number' ? item.confidence : 0.6,
         };
       });
 
       setParsedReport({
         stock: normalizedStock,
-        beds: res.beds || { available: 2, confidence: 0.94 },
+        beds: res.beds || { confidence: 0 },
         staff: res.staff || [],
         isFallback: false,
+        transcript: res.transcript,
       });
     } catch (e) {
       if (selectedImage && !inputContent) {
@@ -449,19 +500,36 @@ export const Screen1_PhcStaff: React.FC = () => {
     }
   };
 
-  const handleUseSampleRegister = () => {
+  const handleUseSampleRegister = async () => {
     setPhotoError(null);
-    setSelectedImage('https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&w=700&q=80');
-    const note = 'Morning physical register scan: Metformin 3 strips remaining, 2 beds vacant, Dr Sharma on leave';
-    setTextInput(note);
-    handleProcessReport(note);
+    startReportTimer();
+    try {
+      const blob = await (await fetch('/sample-register.jpg')).blob();
+      const file = new File([blob], 'sample-register.jpg', { type: blob.type || 'image/jpeg' });
+      const dataUrl = await resizeImageToMax1280(file, (pct) => setImageUploadProgress(pct));
+      setTimeout(() => setImageUploadProgress(null), 400);
+      setSelectedImage(dataUrl);
+      setTextInput('');
+      handleProcessReport('', undefined, dataUrl);
+    } catch {
+      setImageUploadProgress(null);
+    }
   };
 
   const handleSaveConfirmed = () => {
     if (!parsedReport) return;
 
-    const reportDuration = reportStartTime ? Math.round((Date.now() - reportStartTime) / 1000) : 14;
+    const reportDuration = reportStartTime ? Math.max(1, Math.round((Date.now() - reportStartTime) / 1000)) : null;
     setLastReportDuration(reportDuration);
+    if (reportDuration) {
+      const next = [...reportDurations, reportDuration].slice(-50);
+      setReportDurations(next);
+      try {
+        localStorage.setItem('dhara-report-durations', JSON.stringify(next));
+      } catch {
+        /* storage unavailable */
+      }
+    }
 
     applyReport(parsedReport, currentPhc.id);
     setSaveSuccess(true);
@@ -786,10 +854,16 @@ export const Screen1_PhcStaff: React.FC = () => {
               </p>
             </div>
 
-            {/* Quick voice simulation transcript */}
+            {micError && (
+              <p role="alert" className="p-3 rounded-[8px] bg-[#FEF3F2] border border-[#B42318] text-sm text-[#B42318]">
+                {micError}
+              </p>
+            )}
+
+            {/* Example sentence for people without a microphone */}
             <div className="pt-2 border-t border-[#D0D5DD]">
-              <span className="text-xs font-semibold text-[#475467] block mb-1.5">
-                Simulate voice transcript:
+              <span className="text-sm font-semibold text-[#344054] block mb-1.5">
+                बिना माइक के आज़माएँ / Try an example sentence:
               </span>
               <button
                 type="button"
@@ -1020,7 +1094,7 @@ export const Screen1_PhcStaff: React.FC = () => {
             </h3>
             <div className="flex items-center gap-2">
               <ListenButton
-                text={
+                textToRead={
                   isHindi
                     ? 'निकाले गए डेटा की पुष्टि करें। कृपया सभी दवाइयों की संख्या और बिस्तरों की स्थिति जांच लें।'
                     : 'Please verify extracted report data before saving.'
@@ -1230,7 +1304,12 @@ export const Screen1_PhcStaff: React.FC = () => {
               {saveSuccess ? (
                 <div className="flex items-center justify-center gap-2">
                   <Check className="w-5 h-5" aria-hidden="true" />
-                  <span>Report submitted ({lastReportDuration || 14}s)</span>
+                  <span>Report submitted{lastReportDuration ? ` in ${lastReportDuration} s` : ''}</span>
+                  {medianReportTime !== null && (
+                    <span className="block text-xs font-normal opacity-90">
+                      Median at this device: {medianReportTime} s
+                    </span>
+                  )}
                 </div>
               ) : (
                 <BilingualText k="sahiHaiSave" lang={language} />
@@ -1255,7 +1334,7 @@ export const Screen1_PhcStaff: React.FC = () => {
             </p>
           </div>
           <ListenButton
-            text={
+            textToRead={
               isHindi
                 ? 'डेटा वापस मिलता है। आपके केंद्र के लिए आने वाले स्टॉक और पिछले प्रतिवेदन पर की गई कार्रवाई की जानकारी।'
                 : 'Data comes back to your center with incoming stock transfers and action taken on your last report.'
@@ -1342,7 +1421,7 @@ export const Screen1_PhcStaff: React.FC = () => {
           </div>
           <div className="flex items-center gap-2">
             <ListenButton
-              text={
+              textToRead={
                 isHindi
                   ? 'स्टाफ़ उपस्थिति चेक-इन। जब आप केंद्र पर उपस्थित हों तो बटन दबाएं।'
                   : 'Staff duty attendance check-in within three hundred meters of facility.'
@@ -1419,7 +1498,7 @@ export const Screen1_PhcStaff: React.FC = () => {
             </p>
           </div>
           <ListenButton
-            text={
+            textToRead={
               isHindi
                 ? 'बिस्तर उपलब्धता काउंटर। खाली और भरे हुए बिस्तरों की संख्या अपडेट करें।'
                 : 'Bed occupancy counter. Update vacant and occupied beds.'

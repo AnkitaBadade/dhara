@@ -428,6 +428,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     title: string,
     targetState?: StateCode
   ) => {
+    // Gemini may return codes like "PCM_500" or "ORS_SACH"; map them to dataset codes (PCM500, ORS...)
+    const SURGE_ALIASES: Record<string, string> = { ORSSACH: 'ORS', ORSSACHET: 'ORS', NS1: 'NS1KIT', ZINC20: 'ZN20', ZN: 'ZN20' };
+    const normSurge: Record<string, number> = {};
+    Object.entries(extraction.surge || {}).forEach(([k, v]) => {
+      const key = String(k).toUpperCase().replace(/[\s_\-]/g, '');
+      const code = SURGE_ALIASES[key] || key;
+      const mult = Number(v);
+      if (Number.isFinite(mult) && mult > 0) normSurge[code] = Math.max(normSurge[code] || 0, mult);
+    });
+    extraction = { ...extraction, surge: normSurge };
     setState((prev) => {
       const stateCode = targetState || prev.selectedState;
       const logItem: ActivityLogItem = {
@@ -815,6 +825,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <AppContext.Provider
       value={{
         ...state,
+        offlineQueue: state.offlineQueue || [],
         setRole,
         setStateCode,
         setLanguage,
